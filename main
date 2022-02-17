@@ -1,0 +1,82 @@
+import requests
+from datetime import datetime, timedelta
+from twilio.rest import Client
+
+# Stock information
+STOCK = "GOOGL"
+COMPANY_NAME = "Alphabet Inc"
+
+# API URLs
+STOCK_ENDPOINT = "https://www.alphavantage.co/query"
+NEWS_ENDPOINT = "https://newsapi.org/v2/everything"
+
+# API Keys
+stock_api = {YOUR API HERE}
+news_api = {YOUR API HERE}
+account_sid = {YOUR SID HERE}
+auth_token = {YOUR API HERE}
+
+# Grabbing yesterday and the day before's date(s) in YYYY-MM-DD, string format
+time_now = datetime.now()
+today = time_now.today()
+yesterday = str(today.date() - timedelta(days=1))
+day_before_y = str(today.date() - timedelta(days=2))
+
+# Parameters for request(s)
+stock_parameters = {
+    "function": "TIME_SERIES_DAILY",
+    "symbol": STOCK,
+    "interval": "60min",
+    "apikey": stock_api
+}
+
+news_parameters = {
+    "q": COMPANY_NAME,
+    "from": yesterday,
+    "sortBy": "popularity",
+    "apiKey": news_api
+}
+
+# API call to the Alpha Vantage server
+stock_response = requests.get(url="https://www.alphavantage.co/query", params=stock_parameters)
+stock_response.raise_for_status()
+stock_data = stock_response.json()
+
+# JSON parsing for the closing price of the day before yesterday and yesterday
+day_before_price = float(stock_data['Time Series (Daily)'][day_before_y]["4. close"])
+yesterday_price = float(stock_data['Time Series (Daily)'][yesterday]["4. close"])
+
+# Get 5% of yesterday's closing price and the difference between the two
+percentage = yesterday_price * .05
+difference = int(abs(day_before_price - yesterday_price))
+difference_raw = int(day_before_price - yesterday_price)
+
+# For our text message
+movement = ""
+if difference_raw < 0:
+    movement = "⬇️"
+else:
+    movement = "⬆️"
+
+if difference >= percentage:
+    # API call to the News API server, grabbing three most popular articles
+    news_response = requests.get("https://newsapi.org/v2/everything", params=news_parameters)
+    news_response.raise_for_status()
+    news_data = news_response.json()
+    first_three = news_data['articles'][:3]
+
+    # Loop through the data index and get the articles' details, then send
+    # three separate texts to my phone number
+    for i in range(0, 3):
+        title = first_three[i]['title']
+        desc = first_three[i]['description']
+
+        client = Client(account_sid, auth_token)
+        message = client.messages \
+            .create(
+            body=f"{STOCK}{movement}\n\n"
+                 f"{title}\n\n"
+                 f"{desc}",
+            from_={YOUR TWILIO NUM HERE},
+            to={YOUR MOBILE NUM HERE}
+        )
